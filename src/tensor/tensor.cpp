@@ -164,27 +164,97 @@ void Tensor::debug() const {
 }
 
 bool Tensor::isContiguous() const {
-    TO_BE_IMPLEMENTED();
+    auto &strides = _meta.strides;
+    auto &shapes = _meta.shape;
+    if (shapes.empty()) {
+        return true;
+    }
+    if (strides.back() != 1) {
+        return false;
+    }
+
+    for (int i = shapes.size() - 1; i > 0; i--) {
+        auto product = strides[i] * shapes[i];
+        if (product != strides[i - 1]) {
+            return false;
+        }
+    }
+
     return true;
 }
+// 2,3,4 --- 4,3,2
 
 tensor_t Tensor::permute(const std::vector<size_t> &order) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    auto &shape = _meta.shape;
+    auto &strides = _meta.strides;
+    std::vector<size_t> new_shape(shape.size());
+    std::vector<ptrdiff_t> new_stride(strides.size());
+
+    for (int i = 0; i < order.size(); i++) {
+        new_shape[i] = shape[order[i]];
+        new_stride[i] = strides[order[i]];
+    }
+    TensorMeta new_meta{_meta.dtype, std::move(new_shape), std::move(new_stride)};
+
+    return std::shared_ptr<Tensor>(new Tensor(std::move(new_meta), _storage, _offset));
 }
 
 tensor_t Tensor::view(const std::vector<size_t> &shape) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
+    if (!isContiguous()) {
+        throw std::runtime_error("view: tensor must be contiguous");
+    }
+
+    size_t new_numel = 1;
+    for (size_t dim : shape) {
+        if (dim == 0) {
+            throw std::runtime_error("view: zero-sized dimension is not supported");
+        }
+
+        new_numel *= dim;
+    }
+
+    if (new_numel != numel()) {
+        throw std::runtime_error("view: element count does not match");
+    }
+
+    std::vector<size_t> new_shape = shape;
+    std::vector<ptrdiff_t> new_strides(shape.size(), 1);
+
+    // 进入要求是至少为2，如果为1的话，就使用前面的默认stride = 1，避免size=1时的一些边界情况
+    for (size_t i = new_strides.size(); i > 1; --i) {
+        new_strides[i - 2] = new_strides[i - 1] * new_shape[i - 1];
+    }
+
+    TensorMeta new_meta{_meta.dtype, std::move(new_shape), std::move(new_strides)};
+
+    return std::shared_ptr<Tensor>(new Tensor(std::move(new_meta), _storage, _offset));
 }
 
+// shape=(3, 4, 5)--->slice(1, 1, 3)
+// 新张量的逻辑形状是 (3, 2, 5) ,这样第1维的坐标索引 可以被new_offset - offset完美补偿
+// 核心是底层存储不变，只改变索引方式，这里是线性偏移
 tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
-    TO_BE_IMPLEMENTED();
-    return std::shared_ptr<Tensor>(new Tensor(_meta, _storage));
-}
 
+    auto &shape = _meta.shape;
+    auto &strides = _meta.strides;
+    std::vector<size_t> new_shape(shape.size());
+    for (int i = 0; i < shape.size(); i++) {
+        new_shape[i] = shape[i];
+    }
+
+    new_shape[dim] = end - start;
+    size_t new_offset = _offset + start * strides[dim]; // 新张量能够对应上原本的情况
+    TensorMeta new_meta{_meta.dtype, std::move(new_shape), strides};
+
+    return std::shared_ptr<Tensor>(new Tensor(new_meta, _storage, new_offset));
+}
+// 这个目前是接收CPU Tensor，放到GPU Tensor对应的内存去--由GPU Tensor调用是合法的
 void Tensor::load(const void *src_) {
-    TO_BE_IMPLEMENTED();
+    // 考虑是否修改大小表示方式
+    size_t Tensor_size = numel() * elementSize();
+    auto device_ptr = this->_storage->memory() + this->_offset;
+
+    core::context().runtime().api()->memcpy_sync(device_ptr, src_, Tensor_size, LLAISYS_MEMCPY_H2D);
 }
 
 tensor_t Tensor::contiguous() const {
