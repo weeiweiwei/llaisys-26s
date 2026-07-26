@@ -173,7 +173,7 @@ bool Tensor::isContiguous() const {
         return false;
     }
 
-    for (int i = shapes.size() - 1; i > 0; i--) {
+    for (size_t i = shapes.size() - 1; i > 0; i--) {
         auto product = strides[i] * shapes[i];
         if (product != strides[i - 1]) {
             return false;
@@ -190,7 +190,7 @@ tensor_t Tensor::permute(const std::vector<size_t> &order) const {
     std::vector<size_t> new_shape(shape.size());
     std::vector<ptrdiff_t> new_stride(strides.size());
 
-    for (int i = 0; i < order.size(); i++) {
+    for (size_t i = 0; i < order.size(); i++) {
         new_shape[i] = shape[order[i]];
         new_stride[i] = strides[order[i]];
     }
