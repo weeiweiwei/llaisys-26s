@@ -174,7 +174,8 @@ bool Tensor::isContiguous() const {
     }
 
     for (size_t i = shapes.size() - 1; i > 0; i--) {
-        auto product = strides[i] * shapes[i];
+        // 需要专门的ptrdiff_t才可以好像
+        ptrdiff_t product = strides[i] * shapes[i];
         if (product != strides[i - 1]) {
             return false;
         }
@@ -238,7 +239,7 @@ tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
     auto &shape = _meta.shape;
     auto &strides = _meta.strides;
     std::vector<size_t> new_shape(shape.size());
-    for (int i = 0; i < shape.size(); i++) {
+    for (size_t i = 0; i < shape.size(); i++) {
         new_shape[i] = shape[i];
     }
 
