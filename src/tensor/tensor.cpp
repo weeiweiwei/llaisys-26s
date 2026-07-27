@@ -231,6 +231,7 @@ tensor_t Tensor::view(const std::vector<size_t> &shape) const {
     return std::shared_ptr<Tensor>(new Tensor(std::move(new_meta), _storage, _offset));
 }
 
+// (3, 4, 5) -- (2,1,4) --- (3,4,3)
 // shape=(3, 4, 5)--->slice(1, 1, 3)
 // 新张量的逻辑形状是 (3, 2, 5) ,这样第1维的坐标索引 可以被new_offset - offset完美补偿
 // 核心是底层存储不变，只改变索引方式，这里是线性偏移
@@ -244,11 +245,13 @@ tensor_t Tensor::slice(size_t dim, size_t start, size_t end) const {
     }
 
     new_shape[dim] = end - start;
-    size_t new_offset = _offset + start * strides[dim]; // 新张量能够对应上原本的情况
+    // 从idx偏移计算公式上理解会更直观
+    size_t new_offset = _offset + start * strides[dim] * this->elementSize();
     TensorMeta new_meta{_meta.dtype, std::move(new_shape), strides};
 
     return std::shared_ptr<Tensor>(new Tensor(new_meta, _storage, new_offset));
 }
+
 // 这个目前是接收CPU Tensor，放到GPU Tensor对应的内存去--由GPU Tensor调用是合法的
 void Tensor::load(const void *src_) {
     // 考虑是否修改大小表示方式
