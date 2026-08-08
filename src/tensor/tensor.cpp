@@ -258,7 +258,14 @@ void Tensor::load(const void *src_) {
     size_t Tensor_size = numel() * elementSize();
     auto device_ptr = this->_storage->memory() + this->_offset;
 
-    core::context().runtime().api()->memcpy_sync(device_ptr, src_, Tensor_size, LLAISYS_MEMCPY_H2D);
+    if (this->deviceType() == LLAISYS_DEVICE_CPU) {
+        core::context().runtime().api()->memcpy_sync(
+            device_ptr, src_, Tensor_size, LLAISYS_MEMCPY_H2H);
+    } else {
+        core::context().setDevice(this->deviceType(), this->deviceId());
+        core::context().runtime().api()->memcpy_sync(
+            device_ptr, src_, Tensor_size, LLAISYS_MEMCPY_H2D);
+    }
 }
 
 tensor_t Tensor::contiguous() const {
